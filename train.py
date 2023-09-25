@@ -14,7 +14,7 @@ NUM_WORKERS = 0
 PIN_MEMORY = True
 input_channel = 30
 output_channel = 30
-epochs = 50
+epochs = 150
 norm_param = {
     'dBZ': [0, 65],
     'ZDR': [-1, 5],
@@ -22,7 +22,8 @@ norm_param = {
 }
 # 逆归一化
 mmin, mmax = norm_param['dBZ']
-save_filename = 'model_dBZ_KDP_ZDR_differentPlus_1.pth'
+save_filename = f'pth/model_dBZ_KDP_ZDR_differentPlus_{epochs}.pth'
+loss_filename = f'loss/loss_differentPlus_{epochs}.txt'
 
 # 引用数据集
 train_loader = get_loaders(
@@ -54,12 +55,19 @@ if load == True:
     # 加载模型的参数
     model.load_state_dict(torch.load(save_path))
 
+    name_p = []
+    para_p = []
+
     # 打印可训练参数
     for name, param in model.named_parameters():
         if param.requires_grad and name in ['a', 'b', 'c']:
             print(name, param)
+            name_p.append(name)
+            para_p.append(param.to('cpu').detach().numpy())
 
     model.eval()
+
+    accuracy_channel = 0
 
     with torch.no_grad():
         for idx, (test_data_dBZ, test_data_KDP, test_data_ZDR, test_val_data) in enumerate(test_loader):
@@ -73,19 +81,35 @@ if load == True:
             original_val_data = test_val_data.to('cpu') * (mmax - mmin) + mmin
 
             diff = torch.abs(original_data - original_val_data)
-            is_accuracy_channel = diff < 0.5
+            is_accuracy_channel = diff < 1.5
             num_correct_points_channel = torch.sum(is_accuracy_channel, dim=(2, 3))
-            accuracy_channel = num_correct_points_channel / (256 * 256)
+            accuracy_channel = accuracy_channel + num_correct_points_channel / (256 * 256)
 
-        print(f'每个通道的准确率: {accuracy_channel}')
+        # print(f'每个通道的准确率: {accuracy_channel/len(test_loader)}')
+        # print(f'每个通道的准确率: {accuracy_channel}')
+
+    accuracy_channel = accuracy_channel/len(test_loader)
+    accuracy_channel = np.sum(accuracy_channel.numpy(), axis=0)/4.
 
     x = np.arange(0, epochs, 1)
 
-    loss_list = data_read('loss_data.txt')
+    loss_list = data_read(loss_filename)
 
     plt.plot(x, loss_list)
+    plt.title(f'epochs: {epochs}')
+    plt.ylabel('loss')
+    plt.xlabel('epoch')
 
     plt.show()
+
+    print(name_p, para_p)
+
+    plt.bar(name_p, para_p)
+    plt.xlabel('name')
+    plt.title(f'epochs: {epochs}')
+
+    plt.show()
+
 
     for i in range(1, 4, 1):
         plt.subplot(1, 3, i)
@@ -95,13 +119,13 @@ if load == True:
         plt.ylabel('accuracy')
         if i == 1:
             plt.xlabel('1km')
-            plt.bar(x, accuracy_channel[0][0:10])
+            plt.bar(x, accuracy_channel[0:10])
         if i == 2:
             plt.xlabel('3km')
-            plt.bar(x, accuracy_channel[0][10:20])
+            plt.bar(x, accuracy_channel[10:20])
         if i == 3:
             plt.xlabel('7km')
-            plt.bar(x, accuracy_channel[0][20:30])
+            plt.bar(x, accuracy_channel[20:30])
 
     plt.subplots_adjust(left=0.1,
                         bottom=0.1,
@@ -110,9 +134,18 @@ if load == True:
                         wspace=0.6,
                         hspace=0.1
                         )
+
+    plt.suptitle(f'epochs: {epochs}')
+
     plt.show()
 
 else:
+    # 定义模型保存路径
+    save_path = f'pth/model_dBZ_KDP_ZDR_differentPlus_{epochs}.pth'
+
+    # 加载模型的参数
+    model.load_state_dict(torch.load(save_path))
+
     for i in range(epochs):
         for idx, (train_data_dBZ, train_data_KDP, train_data_ZDR, val_data) in enumerate(train_loader):
             sum = 0
@@ -142,5 +175,5 @@ else:
     # 保存模型的参数
     torch.save(model.state_dict(), save_path)
 
-    with open("loss_data.txt", 'w') as train_los:
+    with open(loss_filename, 'w') as train_los:
         train_los.write(str(loss_list))

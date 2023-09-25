@@ -19,7 +19,7 @@ class TrainDataset(Dataset):
     def __init__(self, train):
         super(TrainDataset, self).__init__()
         self.train_len = 100
-        self.test_len = 104
+        self.test_len = 120
         self.filePath_dBZ = "D:\shumo\dBZ"
         self.filePath_KDP = "D:\shumo\KDP"
         self.filePath_ZDR = "D:\shumo\ZDR"
